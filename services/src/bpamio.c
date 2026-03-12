@@ -607,7 +607,7 @@ int find_member(FM_BPAMHandle* bh, const char* mem, const DBG_Opts* opts)
    */
   bh->next_record_len = 0;
   bh->next_record_start = NULL;
-
+  bh->line_num = 0;
   return 0;
 }
 
