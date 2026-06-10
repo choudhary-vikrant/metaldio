@@ -30,7 +30,7 @@ OPENA    ASDPRO BASE_REG=3,USR_DSAL=OPENA_DSAL
 
 *
 * Set up EODAD routine, which will just set R2 to 1
-* R2 will be checked in the CHECKA code where it is 
+* R2 will be checked in the CHECKA code where it is
 * expected to be triggered
 *
          LA  R5,EODAD
@@ -92,7 +92,7 @@ OPENA_DCB          DS AL4
 **|     DCB Address
 **| Output:
 **|   R15 -> RC 0 if successful, non-zero otherwise
-**|   High order 2 bytes have reason code, 
+**|   High order 2 bytes have reason code,
 **|   Low order 2 bytes have return code
 
 DIOA     CSECT
@@ -101,7 +101,7 @@ FINDA    ASDPRO BASE_REG=3,USR_DSAL=FINDA_DSAL
          LR    R7,R1
          USING FINDA_PARMS,R7
 
-* Call SVC18 with R0 pointing to PLIST and R1 (complement) 
+* Call SVC18 with R0 pointing to PLIST and R1 (complement)
 * containing DCB address
 *
 * The FIND macro generates 'fluff' tests that
@@ -155,7 +155,7 @@ READA_EXIT   DS    0H
 
 READA_PARMS   DSECT
 READA_DECB    DS AL4
-READA_DSAL    EQU 0         
+READA_DSAL    EQU 0
 
 **| WRITEA..... Write BLOCK, return results
 **| https://tech.mikefulton.ca/WRITEMacro
@@ -163,16 +163,26 @@ READA_DSAL    EQU 0
 **|   R1 -> pointer to DECB
 **| Output:
 **|   R15 -> RC 0 if successful, non-zero otherwise
+**|   R15 = 139 if B37 (out of space) abend caught
 
 DIOA     CSECT
          ENTRY WRITEA
 WRITEA   ASDPRO BASE_REG=3,USR_DSAL=WRITEA_DSAL
 
-* Call Write Function
-
+* Save DECB pointer for ESTAE exit
          USING WRITEA_PARMS,R1
-         L    R1,WRITEA_DECB
+         L    R4,WRITEA_DECB        Save DECB address in R4
+
+* Set up ESTAE to catch B37 (out of space) and other abends
+         LA   R5,WRITEERR           Load address of ESTAE exit
+         ESTAE (5),CT,PARAM=(R4)    Establish ESTAE with DECB as parm
+
+* Call Write Function
+         LR   R1,R4                 Restore DECB address to R1
          WRITE (1),SF,MF=E
+
+* Cancel ESTAE - WRITE completed successfully
+         ESTAE 0
 
 *
 * No return code for WRITE. Use CHECK
@@ -182,12 +192,47 @@ WRITEA   ASDPRO BASE_REG=3,USR_DSAL=WRITEA_DSAL
 WRITEA_EXIT   DS    0H
          ASDEPI
 
-         DROP
+* ESTAE exit routine for WRITE errors
+* On entry:
+*   R1 -> SDWA (System Diagnostic Work Area) or 0 if no SDWA
+*   R2-R14 -> Registers at time of abend
+* On exit:
+*   R15 = 0 to percolate, 4 to retry, 16 to resume at next instruction
+WRITEERR DS    0H
+         USING *,R15                Temporary base
+         LTR   R1,R1                Check if SDWA provided
+         BZ    WRITEERR_NSDWA       No SDWA, can't analyze
+
+* Check completion code in SDWA
+         USING SDWA,R1
+         ICM   R2,B'0111',SDWACMPC  Insert 3-byte completion code
+         N     R2,=X'00000FFF'      Mask to get system code
+         C     R2,=X'00000B37'      Is it B37 (out of space)?
+         BE    WRITEERR_B37         Yes, handle B37
+         C     R2,=X'00000D37'      Is it D37 (secondary exhausted)?
+         BE    WRITEERR_B37         Yes, treat same as B37
+         C     R2,=X'00000E37'      Is it E37 (no space on volume)?
+         BE    WRITEERR_B37         Yes, treat same as B37
+
+* Other abend - let it percolate
+WRITEERR_NSDWA DS 0H
+         LA    R15,0                Percolate the abend
+         BR    R14                  Return to RTM
+
+* B37/D37/E37 - Set return code and resume
+WRITEERR_B37 DS 0H
+         LA    R2,139               Set RC=139 for space error
+         ST    R2,SDWAGR15          Set R15 in SDWA for return
+         ESTAE 0                    Cancel ESTAE
+         LA    R15,16               Resume at next instruction
+         BR    R14                  Return to RTM
+
+         DROP  R1,R15
          LTORG
 
 WRITEA_PARMS   DSECT
 WRITEA_DECB    DS AL4
-WRITEA_DSAL    EQU 0         
+WRITEA_DSAL    EQU 0
 
 **| CHECKA..... CHECK DECB, return result
 **| https://tech.mikefulton.ca/CHECKMacro
@@ -206,7 +251,7 @@ CHECKA   ASDPRO BASE_REG=3,USR_DSAL=CHECKA_DSAL
 *
          SR  R2,R2
 
-* Call CHECK function 
+* Call CHECK function
 
          USING CHECKA_PARMS,R1
          L   R1,CHECKA_DECB
@@ -225,7 +270,7 @@ CHECKA_EXIT   DS    0H
 
 CHECKA_PARMS   DSECT
 CHECKA_DECB    DS AL4
-CHECKA_DSAL    EQU 0         
+CHECKA_DSAL    EQU 0
 
 **| NOTEA..... NOTE DCB, return results
 **| https://tech.mikefulton.ca/NOTEMacro
@@ -238,7 +283,7 @@ DIOA     CSECT
          ENTRY NOTEA
 NOTEA    ASDPRO BASE_REG=3,USR_DSAL=NOTEA_DSAL
 
-* Call NOTE function 
+* Call NOTE function
 
          USING NOTEA_PARMS,R1
          L   R1,NOTEA_DCB
@@ -262,12 +307,12 @@ NOTEA_DSAL    EQU 0
 **| Output:
 **|   R15 -> TTRz returned if successful.
 
-DIOA     CSECT 
+DIOA     CSECT
          ENTRY POINTA
 POINTA    ASDPRO BASE_REG=3,USR_DSAL=POINTA_DSAL
          ST    0,0         *** POINT not working correctly yet ***
 
-* Call POINT function 
+* Call POINT function
          USING POINTA_PARMS,R1
          LA    R6,POINTS
 *
@@ -328,7 +373,7 @@ DESERVA_DESP    DS AL4
 DESERVA_DSAL    EQU 0
 
 **| CLOSEA..... CLOSE macro, return results
-**| https://tech.mikefulton.ca/SVC20-CLOSE 
+**| https://tech.mikefulton.ca/SVC20-CLOSE
 **| Input:
 **|   R1 -> pointer to 8 byte OPT/DCB array
 **| Output:
@@ -375,7 +420,7 @@ S99A     ASDPRO BASE_REG=3,USR_DSAL=S99A_DSAL
          OILH R2,X'8000'
          ST  R2,0(,R1)
 * Call DYNALLOC (SVC99) with S99RBP
-         DYNALLOC 
+         DYNALLOC
 *
 S99A_EXIT   DS    0H
          ASDEPI
@@ -385,22 +430,22 @@ S99A_EXIT   DS    0H
 
 S99A_PARMS   DSECT
 S99ARBP      DS AL4
-S99A_DSAL    EQU 0         
+S99A_DSAL    EQU 0
 
 **| STOWA..... SVC 21 massaging input and output
 **| https://tech.mikefulton.ca/SVC21
 **| Input:
 **|   R1 -> pointer to list address and dcb address pointers
 **| Output:
-**|   R15 -> high order 2 bytes are reason code. 
-**|          low order 2 bytes are return code. 
+**|   R15 -> high order 2 bytes are reason code.
+**|          low order 2 bytes are return code.
 
 DIOA     CSECT
          ENTRY STOWA
 STOWA    ASDPRO BASE_REG=3,USR_DSAL=STOWA_DSAL
 
 * For the STOW (SVC 21) call:
-*  R0 is the list address and 
+*  R0 is the list address and
 *  R1 is the dcb address
 *  R15 is also the list address
 
@@ -412,7 +457,7 @@ STOWA    ASDPRO BASE_REG=3,USR_DSAL=STOWA_DSAL
          STOW (1),(0)
 
 *
-* For the return, put low halfword of R0 
+* For the return, put low halfword of R0
 * into high halfword of R15 and return R15
 *
          SLL  R0,16
@@ -427,7 +472,7 @@ STOWA_EXIT   DS    0H
 STOWA_PARMS   DSECT
 STOWA_LST     DS F
 STOWA_DCB     DS F
-STOWA_DSAL    EQU 0         
+STOWA_DSAL    EQU 0
 
 **| S99MSGA..... SVC99MSG
 **| https://tech.mikefulton.ca/IEFDB476
@@ -441,7 +486,7 @@ DIOA     CSECT
 S99MSGA  ASDPRO BASE_REG=3,USR_DSAL=S99MSGA_DSAL
          USING S99MSGA_PARMS,R1
 
-* Call SVC99MSG 
+* Call SVC99MSG
          LINK EP=IEFDB476
 *
 S99MSGA_EXIT   DS    0H
@@ -477,7 +522,7 @@ SYEXDEQA ASDPRO BASE_REG=3,USR_DSAL=SYEXDEQA_DSAL
 
 * Template for DEQ
 
-SYEXDEQT DEQ (7,8,9,SYSTEMS),RET=HAVE,MF=L         
+SYEXDEQT DEQ (7,8,9,SYSTEMS),RET=HAVE,MF=L
 
          DROP
          LTORG
@@ -515,7 +560,7 @@ SYEXENQA ASDPRO BASE_REG=3,USR_DSAL=SYEXENQA_DSAL
 
 * Template for ENQ
 
-SYEXENQT ENQ (7,8,E,9,SYSTEMS),RET=USE,MF=L         
+SYEXENQT ENQ (7,8,E,9,SYSTEMS),RET=USE,MF=L
 
          DROP
          LTORG
@@ -540,6 +585,7 @@ SYEXENQA_DSAL    EQU SYEXENQL
 &SYSIGWDES SETB 0
 &SYSIGWDESLIST SETC 'OFF'
     IGWDES
+    IHASDWA
 
 **| Finish off the CSECT
 

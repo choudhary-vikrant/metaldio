@@ -129,7 +129,7 @@ static void validate_var_block(FM_BPAMHandle* bh, const DBG_Opts* opts)
   char* next_rec_start = &(((char*)block_hw)[4]);
   int line_num = 1;
   while ((next_rec_start - block_char) < block_size) {
-    unsigned short rec_length = *((unsigned short*) next_rec_start); 
+    unsigned short rec_length = *((unsigned short*) next_rec_start);
     debug(opts, "Record %d Length: %d\n", line_num++, rec_length);
     if (rec_length < 4) {
       errmsg(opts, "Unexpected record length. Validation Failed.\n");
@@ -210,7 +210,7 @@ static int next_record(FM_BPAMHandle* bh, const DBG_Opts* opts)
     /*
      * The residual count indicates how many pad bytes are at the end
      * of the last block of a fixed block member. This needs to be
-     * subtracted from the block size to determine if you are at the 
+     * subtracted from the block size to determine if you are at the
      * end of the block.
      */
     struct iob* PTR32 iob = (struct iob* PTR32) bh->decb->stat_addr;
@@ -245,15 +245,15 @@ static int write_block(FM_BPAMHandle* bh, const DBG_Opts* opts)
   SET_24BIT_PTR(bh->decb->dcb24, bh->dcb);
   bh->decb->area = bh->block;
 
-  debug(opts, "FB:%c VB:%c bytes_used:%d block_size:%d\n", 
-    (bh->dcb->dcbexlst.dcbrecfm & dcbrecf) ? 'Y' : 'N', 
-    (bh->dcb->dcbexlst.dcbrecfm & dcbrecv) ? 'Y' : 'N', 
-    bh->bytes_used, 
+  debug(opts, "FB:%c VB:%c bytes_used:%d block_size:%d\n",
+    (bh->dcb->dcbexlst.dcbrecfm & dcbrecf) ? 'Y' : 'N',
+    (bh->dcb->dcbexlst.dcbrecfm & dcbrecv) ? 'Y' : 'N',
+    bh->bytes_used,
     bh->block_size
   );
   if (bh->dcb->dcbexlst.dcbrecfm & dcbrecv) {
     /*
-     * Specify the block size for the variable length records 
+     * Specify the block size for the variable length records
      */
     unsigned short* halfword = (unsigned short*) (bh->block);
     halfword[0] = bh->bytes_used;  /* size of block */
@@ -264,23 +264,48 @@ static int write_block(FM_BPAMHandle* bh, const DBG_Opts* opts)
     validate_var_block(bh, opts);
     debug(opts, "(Block Write) First Record length:%d bytes used:%d\n", halfword[2], halfword[0]);
 
-  } else if (bh->dcb->dcbexlst.dcbrecfm & dcbrecf) { 
+  } else if (bh->dcb->dcbexlst.dcbrecfm & dcbrecf) {
     bh->dcb->dcbblksi = bh->bytes_used;
   } else {
-    errmsg(opts, "Not sure how to write a block that is not recv or recf\n");
+    // Not sure how to write a block that is not recv or recf
+    fprintf(stderr, "inputDataIsNotRecvOrRecf");
     return 4;
   }
 
+  // Flush output before WRITE in case of abend
+  fprintf(stderr, "Calling WRITE() with block size: %d bytes\n", bh->bytes_used);
+
   int rc = WRITE(bh->decb);
+
+  fprintf(stderr, "\t\tWRITE() returned rc=%d\n", rc);
   if (rc) {
     errmsg(opts, "Unable to perform WRITE. rc:%d\n", rc);
     return rc;
   }
+
+  // Flush output before CHECK in case of error
+  fprintf(stderr, "\t\tCalling CHECK() on WRITE operation...\n");
+
   rc = CHECK(bh->decb);
+
+  fprintf(stderr, "\t\tCHECK() returned rc=%d\n", rc);
+
   if (rc) {
     errmsg(opts, "Unable to perform CHECK on WRITE. rc:%d\n", rc);
+    // CHECK returned error
+    // rc=1: End of data (EODAD) - shouldn't happen on WRITE
+    // rc=2: SYNAD error (I/O error including B37 - out of space)
+
+    if (rc == 2) {
+      // SYNAD error - I/O error (likely B37 - out of space)
+      fprintf(stderr, "BGYSC04119E Dataset write failed - insufficient space\n");
+      fprintf(stderr, "          Increase dataset primary/secondary allocation\n");
+    } else {
+      // Other CHECK failure
+      fprintf(stderr, "BGYSC04119E Dataset write failed - Unable to write\n");
+    }
     return rc;
-  }  
+  }
 
   if (!bh->memstart_ttr_known) {
     bh->memstart_ttr = NOTE(bh->dcb);
@@ -310,7 +335,7 @@ static int copy_record_to_block(FM_BPAMHandle* bh, unsigned short usr_rec_len, c
 {
   int truncated = 0;
   debug(opts, "Add Record of length: %d bytes. Block bytes used: %d\n", usr_rec_len, bh->bytes_used);
- 
+
   const int BDW_SIZE = 4;
   const int RDW_SIZE = 4;
 
@@ -322,7 +347,7 @@ static int copy_record_to_block(FM_BPAMHandle* bh, unsigned short usr_rec_len, c
   if (bh->dcb->dcbexlst.dcbrecfm & dcbrecv) {
     /*
      * Variable format
-     */    
+     */
     unsigned short* next_rec;
     rec_hdr_size = BDW_SIZE;
     if (bh->bytes_used == 0) {
@@ -345,9 +370,9 @@ static int copy_record_to_block(FM_BPAMHandle* bh, unsigned short usr_rec_len, c
     } else {
       rec_len = usr_rec_len;
     }
-    
+
     next_rec[0] = disk_len;
-    
+
     next_rec[1] = 0;
     bh->bytes_used += RDW_SIZE;
     debug(opts, "Disk Record length:%d bytes used:%d\n", next_rec[0], bh->bytes_used);
@@ -370,10 +395,10 @@ static int copy_record_to_block(FM_BPAMHandle* bh, unsigned short usr_rec_len, c
   }
 
   debug(opts, "Copy data to disk from offset: %d for %d bytes. disk_len:%d rec_len:%d\n", bh->bytes_used, rec_len, disk_len, rec_len);
-  
+
   memcpy(&block_char[bh->bytes_used], rec, rec_len);
-  bh->bytes_used += rec_len; 
- 
+  bh->bytes_used += rec_len;
+
   if (bh->dcb->dcbexlst.dcbrecfm & dcbrecf) {
     /*
      *  If the record is FIXED, then pad the record out with blanks
@@ -408,7 +433,7 @@ ssize_t write_record(FM_BPAMHandle* bh, size_t rec_len, const char* rec, const D
    * Batch up records until there is a full block and write it out
    */
   ssize_t rc;
-  
+
   // If record doesn't fit in current block, write the block first
   if (!can_add_record_to_block(bh, rec_len)) {
     rc = write_block(bh, opts);
@@ -417,11 +442,11 @@ ssize_t write_record(FM_BPAMHandle* bh, size_t rec_len, const char* rec, const D
       return -1;
     }
   }
-  
+
   // Now add the record to the (possibly new) block
   int truncated = copy_record_to_block(bh, rec_len, rec, opts);
   bh->line_num++;
-  
+
   // Return truncation status (0 or 1) - maintains compatibility with callers
   rc = truncated;
   return rc;
@@ -645,9 +670,9 @@ int read_member_dir_entry(struct desp* PTR32 desp, const DBG_Opts* opts)
 const struct stowlist_add stowlistadd_template = { "        ", 0, 0, 0, 0 };
 static void add_mem_stats(struct stowlist_add* PTR32 sla, const struct mstat* mstat, unsigned int ttr, const DBG_Opts* opts)
 {
-  char userid[8+1] = "        "; 
+  char userid[8+1] = "        ";
   *sla = stowlistadd_template;
-  memcpy(sla->mem_name, mstat->name, strlen(mstat->name)); 
+  memcpy(sla->mem_name, mstat->name, strlen(mstat->name));
   STOW_SET_TTR((*sla), ttr);
 
   unsigned int userdata_len = sizeof(struct ispf_disk_stats)/2; /* number of halfwords of ISPF statistics */
@@ -678,8 +703,8 @@ static void add_mem_stats(struct stowlist_add* PTR32 sla, const struct mstat* ms
     ids.ver_num = mstat->ispf_version;
     ids.mod_num = mstat->ispf_modification;
 
-    ids.full_curr_num_lines = mstat->ispf_current_lines; 
-    ids.full_init_num_lines = mstat->ispf_initial_lines; 
+    ids.full_curr_num_lines = mstat->ispf_current_lines;
+    ids.full_init_num_lines = mstat->ispf_initial_lines;
     ids.full_mod_num_lines = mstat->ispf_modified_lines;
 
     if (mstat->ispf_current_lines < SHRT_MAX) {
@@ -1002,7 +1027,7 @@ static char* PTR32 ispf_qname(const char* qn, const DBG_Opts* opts)
   return qname;
 }
 
-int enq_dataset_member(const char* ds, const char* wmem, const DBG_Opts* opts) 
+int enq_dataset_member(const char* ds, const char* wmem, const DBG_Opts* opts)
 {
   char* PTR32 rname = ispf_rname(ds, wmem, opts);
   char* PTR32 qname = ispf_qname("SPFEDIT", opts);
@@ -1016,7 +1041,7 @@ int enq_dataset_member(const char* ds, const char* wmem, const DBG_Opts* opts)
   return rc;
 }
 
-int deq_dataset_member(const char* ds, const char* wmem, const DBG_Opts* opts) 
+int deq_dataset_member(const char* ds, const char* wmem, const DBG_Opts* opts)
 {
   char* PTR32 rname = ispf_rname(ds, wmem, opts);
   char* PTR32 qname = ispf_qname("SPFEDIT", opts);
