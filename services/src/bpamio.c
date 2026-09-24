@@ -887,9 +887,10 @@ int close_pds(FM_BPAMHandle* bh, const DBG_Opts* opts)
   }
 
   /* DEBUG: Print dd structure before ddfree */
-  fprintf(stderr, "[DEBUG close_pds] Before ddfree: DDname='%.*s' (len=%d) key=0x%04x num=%d\n",
+  printf("[DEBUG close_pds] Before ddfree: DDname='%.*s' (len=%d) key=0x%04x num=%d\n",
          dd.s99tulng, dd.s99tupar, dd.s99tulng, dd.s99tukey, dd.s99tunum);
-  fprintf(stderr, "[DEBUG close_pds] bh->ddname='%s'\n", bh->ddname);
+  printf("[DEBUG close_pds] bh->ddname='%s'\n", bh->ddname);
+  fflush(stdout);
   
   rc = ddfree(&dd, opts);
   if (rc) {

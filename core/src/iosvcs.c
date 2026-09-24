@@ -68,8 +68,9 @@ int dsdd_alloc(struct s99_common_text_unit* dsn, struct s99_common_text_unit* dd
 int ddfree(struct s99_common_text_unit* dd, const DBG_Opts* opts)
 {
   /* DEBUG: Print what we received */
-  fprintf(stderr, "[DEBUG ddfree] Received dd: key=0x%04x num=%d len=%d data='%.*s'\n",
+  printf("[DEBUG ddfree] Received dd: key=0x%04x num=%d len=%d data='%.*s'\n",
          dd->s99tukey, dd->s99tunum, dd->s99tulng, dd->s99tulng, dd->s99tupar);
+  fflush(stdout);
   
   struct s99rb* PTR32 parms;
   enum s99_verb verb = S99VRBUN;
@@ -80,15 +81,17 @@ int ddfree(struct s99_common_text_unit* dd, const DBG_Opts* opts)
   struct s99_rbx s99rbx = s99rbxtemplate;
 
   /* DEBUG: Print s99rbx before s99_init */
-  fprintf(stderr, "[DEBUG ddfree] s99rbxtemplate EID: '%.*s' EVER=%d\n",
+  printf("[DEBUG ddfree] s99rbxtemplate EID: '%.*s' EVER=%d\n",
          (int)sizeof(s99rbx.s99eid), s99rbx.s99eid, s99rbx.s99ever);
+  fflush(stdout);
 
   parms = s99_init(verb, s99flag1, s99flag2, &s99rbx, num_text_units, dd );
   
   /* DEBUG: Print RBX after s99_init */
   if (parms && parms->s99s99x) {
-    fprintf(stderr, "[DEBUG ddfree] After s99_init, RBX EID: '%.*s' EVER=%d\n",
+    printf("[DEBUG ddfree] After s99_init, RBX EID: '%.*s' EVER=%d\n",
            (int)sizeof(parms->s99s99x->s99eid), parms->s99s99x->s99eid, parms->s99s99x->s99ever);
+    fflush(stdout);
   }
   
   if (!parms) {
