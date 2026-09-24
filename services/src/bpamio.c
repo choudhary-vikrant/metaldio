@@ -886,6 +886,11 @@ int close_pds(FM_BPAMHandle* bh, const DBG_Opts* opts)
     return rc;
   }
 
+  /* DEBUG: Print dd structure before ddfree */
+  errmsg(opts, "[DEBUG close_pds] Before ddfree: DDname='%.*s' (len=%d) key=0x%04x num=%d\n",
+         dd.s99tulng, dd.s99tupar, dd.s99tulng, dd.s99tukey, dd.s99tunum);
+  errmsg(opts, "[DEBUG close_pds] bh->ddname='%s'\n", bh->ddname);
+  
   rc = ddfree(&dd, opts);
   if (rc) {
     errmsg(opts, "DYNFREE (UNFREE) failed for DD:%s rc:%d - dataset may remain allocated\n",

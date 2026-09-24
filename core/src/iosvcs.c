@@ -67,6 +67,10 @@ int dsdd_alloc(struct s99_common_text_unit* dsn, struct s99_common_text_unit* dd
  */
 int ddfree(struct s99_common_text_unit* dd, const DBG_Opts* opts)
 {
+  /* DEBUG: Print what we received */
+  errmsg(opts, "[DEBUG ddfree] Received dd: key=0x%04x num=%d len=%d data='%.*s'\n",
+         dd->s99tukey, dd->s99tunum, dd->s99tulng, dd->s99tulng, dd->s99tupar);
+  
   struct s99rb* PTR32 parms;
   enum s99_verb verb = S99VRBUN;
   struct s99_flag1 s99flag1 = {0};
@@ -75,7 +79,18 @@ int ddfree(struct s99_common_text_unit* dd, const DBG_Opts* opts)
   int rc;
   struct s99_rbx s99rbx = s99rbxtemplate;
 
+  /* DEBUG: Print s99rbx before s99_init */
+  errmsg(opts, "[DEBUG ddfree] s99rbxtemplate EID: '%.*s' EVER=%d\n",
+         (int)sizeof(s99rbx.s99eid), s99rbx.s99eid, s99rbx.s99ever);
+
   parms = s99_init(verb, s99flag1, s99flag2, &s99rbx, num_text_units, dd );
+  
+  /* DEBUG: Print RBX after s99_init */
+  if (parms && parms->s99s99x) {
+    errmsg(opts, "[DEBUG ddfree] After s99_init, RBX EID: '%.*s' EVER=%d\n",
+           (int)sizeof(parms->s99s99x->s99eid), parms->s99s99x->s99eid, parms->s99s99x->s99ever);
+  }
+  
   if (!parms) {
     errmsg(opts, "Unable to initialize SVC99 (DYNFREE) control blocks\n");
     return 16;
